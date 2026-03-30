@@ -1,0 +1,70 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Project {
+  id              String       @id @default(uuid())
+  name            String
+  promptTemplate  String       @default("CINEMA TAINS")
+  flowMode        String       @default("image-to-video")
+  aiVersion       String       @default("veo-3.1")
+  staticSeed      Boolean      @default(false)
+  refineLogic     Boolean      @default(false)
+
+  audioPath       String?
+  audioDuration   Float?
+
+  transcriptTxt   String?
+  transcriptJson  String?
+
+  prompts         String?      // JSON array of generated prompts
+  promptCount     Int          @default(0)
+
+  status          String       @default("draft") // draft, transcribing, generating, ready, rendering, completed
+
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  fragments       Fragment[]
+  generations     Generation[]
+}
+
+model Fragment {
+  id           String   @id @default(uuid())
+  projectId    String
+  index        Int
+  prompt       String
+  videoPath    String?
+  thumbnailPath String?
+  duration     Float?
+  status       String   @default("pending") // pending, generating, completed, failed
+
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  project      Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, index])
+}
+
+model Generation {
+  id            String   @id @default(uuid())
+  projectId     String
+  status        String   @default("pending") // pending, running, completed, cancelled
+  totalFragments Int     @default(0)
+  completedFragments Int @default(0)
+  duration      Float?
+  elapsed       Float?
+  startedAt     DateTime?
+  completedAt   DateTime?
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  project       Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+}
