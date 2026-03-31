@@ -14,9 +14,10 @@ export interface TranscriptResult {
 }
 
 export async function transcribeAudio(audioPath: string): Promise<TranscriptResult> {
-  const transcript = await client.transcripts.transcribe({
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const transcript = await (client.transcripts.transcribe as any)({
     audio: audioPath,
-    speech_model: "universal-3-pro" as unknown as "best",
+    speech_models: ["universal-3-pro"],
   });
 
   if (transcript.status === "error") {
@@ -24,7 +25,7 @@ export async function transcribeAudio(audioPath: string): Promise<TranscriptResu
   }
 
   const text = transcript.text || "";
-  const timestamps = (transcript.words || []).map((word) => ({
+  const timestamps = (transcript.words || []).map((word: { text: string; start: number; end: number }) => ({
     text: word.text,
     start: word.start,
     end: word.end,
