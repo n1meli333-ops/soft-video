@@ -25,6 +25,8 @@ export default function PromptsPage() {
   const [prompts, setPrompts] = useState<string[]>([]);
   const [copied, setCopied] = useState(false);
   const [showTimestamps, setShowTimestamps] = useState(false);
+  const [aiProvider, setAiProvider] = useState<"gemini" | "openai">("gemini");
+  const [aiModel, setAiModel] = useState("");
 
   useEffect(() => {
     fetch(`/api/projects/${projectId}`)
@@ -79,7 +81,7 @@ export default function PromptsPage() {
       const res = await fetch("/api/generate-prompts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ projectId, specialPrompt }),
+        body: JSON.stringify({ projectId, specialPrompt, aiProvider, aiModel: aiModel || undefined }),
       });
       const data = await res.json();
       if (res.ok) {
@@ -238,9 +240,58 @@ export default function PromptsPage() {
           Step 2: Generate Video Prompts
         </h2>
 
+        {/* AI Provider Selection */}
+        <div className="mb-4 flex gap-4">
+          <div className="flex-1">
+            <label className="block text-sm text-[var(--text-secondary)] mb-2">
+              AI Provider
+            </label>
+            <select
+              value={aiProvider}
+              onChange={(e) => {
+                const provider = e.target.value as "gemini" | "openai";
+                setAiProvider(provider);
+                setAiModel("");
+              }}
+              className="w-full text-sm"
+            >
+              <option value="gemini">Google Gemini</option>
+              <option value="openai">OpenAI GPT</option>
+            </select>
+          </div>
+          <div className="flex-1">
+            <label className="block text-sm text-[var(--text-secondary)] mb-2">
+              Model
+            </label>
+            <select
+              value={aiModel}
+              onChange={(e) => setAiModel(e.target.value)}
+              className="w-full text-sm"
+            >
+              {aiProvider === "gemini" ? (
+                <>
+                  <option value="">gemini-2.0-flash (default)</option>
+                  <option value="gemini-2.5-pro-preview-06-05">gemini-2.5-pro</option>
+                  <option value="gemini-2.5-flash-preview-05-20">gemini-2.5-flash</option>
+                  <option value="gemini-2.0-flash-lite">gemini-2.0-flash-lite</option>
+                </>
+              ) : (
+                <>
+                  <option value="">gpt-4o (default)</option>
+                  <option value="gpt-4o-mini">gpt-4o-mini</option>
+                  <option value="gpt-4.1">gpt-4.1</option>
+                  <option value="gpt-4.1-mini">gpt-4.1-mini</option>
+                  <option value="gpt-4.1-nano">gpt-4.1-nano</option>
+                  <option value="o3-mini">o3-mini</option>
+                </>
+              )}
+            </select>
+          </div>
+        </div>
+
         <div className="mb-4">
           <label className="block text-sm text-[var(--text-secondary)] mb-2">
-            Special prompt (your style instructions for Gemini)
+            Special prompt (your style instructions)
           </label>
           <textarea
             value={specialPrompt}

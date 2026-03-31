@@ -3,7 +3,7 @@ import { prisma } from "@/lib/db";
 import { generateVideoPrompts } from "@/lib/gemini";
 
 export async function POST(req: NextRequest) {
-  const { projectId, specialPrompt } = await req.json();
+  const { projectId, specialPrompt, aiProvider, aiModel } = await req.json();
 
   const project = await prisma.project.findUnique({ where: { id: projectId } });
   if (!project?.transcriptTxt || !project?.transcriptJson) {
@@ -20,6 +20,8 @@ export async function POST(req: NextRequest) {
       transcriptText: project.transcriptTxt,
       timestampsJson: project.transcriptJson,
       specialPrompt: specialPrompt || "",
+      aiProvider: aiProvider || "gemini",
+      aiModel: aiModel || undefined,
     });
 
     // Create fragments in DB
