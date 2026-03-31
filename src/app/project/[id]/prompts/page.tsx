@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
-import { FileText, Loader2, Copy, Download, Sparkles } from "lucide-react";
+import { FileText, Loader2, Copy, Download, Sparkles, Clock, ChevronDown, ChevronUp } from "lucide-react";
 
 interface Project {
   id: string;
@@ -24,6 +24,7 @@ export default function PromptsPage() {
   const [specialPrompt, setSpecialPrompt] = useState("");
   const [prompts, setPrompts] = useState<string[]>([]);
   const [copied, setCopied] = useState(false);
+  const [showTimestamps, setShowTimestamps] = useState(false);
 
   useEffect(() => {
     fetch(`/api/projects/${projectId}`)
@@ -87,7 +88,7 @@ export default function PromptsPage() {
           p ? { ...p, prompts: JSON.stringify(data.prompts), promptCount: data.count, status: "ready" } : p
         );
       } else {
-        alert(data.error || "Generation failed");
+        alert(data.error || "Prompt generation failed. Check that GEMINI_API_KEY is set.");
       }
     } catch (err) {
       console.error(err);
@@ -155,20 +156,77 @@ export default function PromptsPage() {
             )}
           </button>
         ) : (
-          <div className="bg-[var(--bg-card)] border border-[var(--border-color)] rounded-xl p-4">
-            <div className="flex items-center justify-between mb-3">
-              <span className="text-sm font-medium text-green-400">✓ Transcription complete</span>
-              <button
-                onClick={handleTranscribe}
-                disabled={transcribing}
-                className="text-xs text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors"
-              >
-                {transcribing ? "Retranscribing..." : "Retranscribe"}
-              </button>
+          <div className="space-y-3">
+            {/* Transcript Text */}
+            <div className="bg-[var(--bg-card)] border border-[var(--border-color)] rounded-xl p-4">
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-sm font-medium text-green-400">✓ Transcription complete</span>
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={() => {
+                      const blob = new Blob([project.transcriptTxt || ""], { type: "text/plain" });
+                      const url = URL.createObjectURL(blob);
+                      const a = document.createElement("a");
+                      a.href = url;
+                      a.download = "transcript.txt";
+                      a.click();
+                      URL.revokeObjectURL(url);
+                    }}
+                    className="text-xs text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors flex items-center gap-1"
+                  >
+                    <Download size={12} />
+                    TXT
+                  </button>
+                  <button
+                    onClick={handleTranscribe}
+                    disabled={transcribing}
+                    className="text-xs text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors"
+                  >
+                    {transcribing ? "Retranscribing..." : "Retranscribe"}
+                  </button>
+                </div>
+              </div>
+              <div className="max-h-48 overflow-y-auto text-sm text-[var(--text-secondary)] leading-relaxed">
+                {project.transcriptTxt}
+              </div>
             </div>
-            <div className="max-h-48 overflow-y-auto text-sm text-[var(--text-secondary)] leading-relaxed">
-              {project.transcriptTxt}
-            </div>
+
+            {/* Timestamps JSON */}
+            {project.transcriptJson && (
+              <div className="bg-[var(--bg-card)] border border-[var(--border-color)] rounded-xl p-4">
+                <div className="flex items-center justify-between mb-2">
+                  <button
+                    onClick={() => setShowTimestamps(!showTimestamps)}
+                    className="text-sm font-medium text-[var(--text-primary)] flex items-center gap-2 hover:text-[var(--accent)] transition-colors"
+                  >
+                    <Clock size={14} />
+                    Timestamps JSON ({JSON.parse(project.transcriptJson).length} words)
+                    {showTimestamps ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                  </button>
+                  <button
+                    onClick={() => {
+                      const formatted = JSON.stringify(JSON.parse(project.transcriptJson!), null, 2);
+                      const blob = new Blob([formatted], { type: "application/json" });
+                      const url = URL.createObjectURL(blob);
+                      const a = document.createElement("a");
+                      a.href = url;
+                      a.download = "timestamps.json";
+                      a.click();
+                      URL.revokeObjectURL(url);
+                    }}
+                    className="text-xs text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors flex items-center gap-1"
+                  >
+                    <Download size={12} />
+                    JSON
+                  </button>
+                </div>
+                {showTimestamps && (
+                  <div className="max-h-64 overflow-y-auto text-xs text-[var(--text-secondary)] font-mono bg-[var(--bg-primary)] rounded-lg p-3">
+                    <pre>{JSON.stringify(JSON.parse(project.transcriptJson), null, 2)}</pre>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
       </div>
