@@ -16,7 +16,7 @@ export interface TranscriptResult {
 export async function transcribeAudio(audioPath: string): Promise<TranscriptResult> {
   const transcript = await client.transcripts.transcribe({
     audio: audioPath,
-    speech_model: "universal-3-pro",
+    speech_model: "universal-3-pro" as unknown as "best",
   });
 
   if (transcript.status === "error") {
