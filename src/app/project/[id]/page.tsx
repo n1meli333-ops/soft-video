@@ -71,8 +71,8 @@ export default function GeneralPage() {
 
     // Derive provider/model from aiVersion
     const aiVersionMap: Record<string, { provider: "gemini" | "openai"; model: string }> = {
-      "veo-3.1": { provider: "gemini", model: "gemini-2.5-flash-preview-05-20" },
-      "veo-3.0": { provider: "gemini", model: "gemini-2.5-flash-preview-05-20" },
+      "veo-3.1": { provider: "gemini", model: "gemini-2.0-flash" },
+      "veo-3.0": { provider: "gemini", model: "gemini-2.0-flash" },
       "gpt-5.2": { provider: "openai", model: "gpt-4o" },
     };
     const aiConfig = aiVersionMap[project.aiVersion] || { provider: "openai", model: "gpt-4o" };
