@@ -17,7 +17,7 @@ export async function transcribeAudio(audioPath: string): Promise<TranscriptResu
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const transcript = await (client.transcripts.transcribe as any)({
     audio: audioPath,
-    speech_models: ["universal-3-pro"],
+    speech_models: ["universal-3-pro", "universal-2"],
   });
 
   if (transcript.status === "error") {
