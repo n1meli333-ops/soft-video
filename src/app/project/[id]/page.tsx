@@ -23,6 +23,10 @@ interface Project {
 interface Template {
   id: string;
   name: string;
+  stylePrompt: string;
+  negativePrompt: string;
+  techPrompt: string;
+  indexFormat: string;
 }
 
 export default function GeneralPage() {
@@ -65,6 +69,22 @@ export default function GeneralPage() {
       return;
     }
 
+    // Derive provider/model from aiVersion
+    const aiVersionMap: Record<string, { provider: "gemini" | "openai"; model: string }> = {
+      "veo-3.1": { provider: "gemini", model: "gemini-2.5-flash-preview-05-20" },
+      "veo-3.0": { provider: "gemini", model: "gemini-2.5-flash-preview-05-20" },
+      "gpt-5.2": { provider: "openai", model: "gpt-4o" },
+    };
+    const aiConfig = aiVersionMap[project.aiVersion] || { provider: "openai", model: "gpt-4o" };
+
+    // Build special prompt from selected template
+    const selTmpl = templates.find((t) => t.id === project.templateId);
+    const specialPrompt = selTmpl
+      ? [selTmpl.stylePrompt, selTmpl.negativePrompt, selTmpl.techPrompt, selTmpl.indexFormat]
+          .filter(Boolean)
+          .join("\n\n")
+      : "";
+
     setStarting(true);
     setPipelineError(null);
 
@@ -73,9 +93,9 @@ export default function GeneralPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          specialPrompt: "",
-          aiProvider: "gemini",
-          aiModel: "",
+          specialPrompt,
+          aiProvider: aiConfig.provider,
+          aiModel: aiConfig.model,
         }),
       });
       const data = await res.json();
@@ -100,8 +120,6 @@ export default function GeneralPage() {
       </div>
     );
   }
-
-  const selectedTemplate = templates.find((t) => t.id === project.templateId);
 
   return (
     <div className="max-w-2xl mx-auto p-8">
