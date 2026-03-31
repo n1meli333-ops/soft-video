@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback, useRef } from "react";
 import { useParams } from "next/navigation";
 import { FragmentCard } from "@/components/FragmentCard";
 import { StatusBar } from "@/components/StatusBar";
-import { Upload, Loader2, FolderOpen } from "lucide-react";
+import { Upload, Loader2, FolderOpen, ArrowLeft, X as XIcon } from "lucide-react";
 
 interface Fragment {
   id: string;
@@ -23,6 +23,7 @@ interface Generation {
   completedFragments: number;
   duration: number | null;
   elapsed: number | null;
+  createdAt: string;
 }
 
 interface Project {
@@ -42,6 +43,7 @@ export default function GenerationsPage() {
   const [rendering, setRendering] = useState(false);
   const [selectedPrompt, setSelectedPrompt] = useState<string | null>(null);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const [viewMode, setViewMode] = useState<"list" | "detail">("list");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -49,11 +51,24 @@ export default function GenerationsPage() {
     const res = await fetch(`/api/projects/${projectId}`);
     const data: Project = await res.json();
     setProject(data);
+    // Auto-switch to detail if there are fragments
+    if (data.fragments.length > 0 || data.status === "generating" || data.status === "ready") {
+      setViewMode("detail");
+    }
   }, [projectId]);
 
   useEffect(() => {
     fetchProject();
   }, [fetchProject]);
+
+  // Poll for updates when generating
+  useEffect(() => {
+    if (!project) return;
+    if (project.status === "generating" || project.status === "transcribing") {
+      const interval = setInterval(fetchProject, 5000);
+      return () => clearInterval(interval);
+    }
+  }, [project?.status, fetchProject]);
 
   // Timer for elapsed time during rendering
   useEffect(() => {
@@ -78,21 +93,16 @@ export default function GenerationsPage() {
     try {
       const formData = new FormData();
       formData.append("projectId", projectId);
-
-      // Sort files by name to maintain order
       const sortedFiles = Array.from(files).sort((a, b) =>
         a.name.localeCompare(b.name, undefined, { numeric: true })
       );
-
       for (const file of sortedFiles) {
         formData.append("fragments", file);
       }
-
       const res = await fetch("/api/upload-fragments", {
         method: "POST",
         body: formData,
       });
-
       if (res.ok) {
         await fetchProject();
       } else {
@@ -115,7 +125,6 @@ export default function GenerationsPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ projectId }),
       });
-
       const data = await res.json();
       if (res.ok) {
         alert(`Video rendered successfully!\nOutput: ${data.outputPath}`);
@@ -149,37 +158,96 @@ export default function GenerationsPage() {
     );
   }
 
-  const completedFragments = project.fragments.filter(
-    (f) => f.status === "completed"
-  ).length;
+  // List view - shows generation history or empty state
+  if (viewMode === "list") {
+    return (
+      <div className="h-full flex flex-col items-center justify-center">
+        {project.generations.length === 0 && project.fragments.length === 0 ? (
+          <div className="text-center text-[var(--text-muted)]">
+            <p className="text-lg">No projects yet</p>
+          </div>
+        ) : (
+          <div className="w-full max-w-2xl mx-auto p-6 space-y-3">
+            {project.generations.map((gen) => (
+              <div
+                key={gen.id}
+                onClick={() => setViewMode("detail")}
+                className="bg-[var(--bg-card)] border border-[var(--border-color)] rounded-xl p-4 cursor-pointer hover:border-[var(--border-light)] transition-all"
+              >
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-sm font-semibold">{project.name}</h3>
+                    <p className="text-xs text-[var(--text-muted)] mt-1">
+                      {gen.completedFragments}/{gen.totalFragments} fragments
+                    </p>
+                  </div>
+                  <span className={`text-xs px-2 py-0.5 rounded-full ${
+                    gen.status === "completed" ? "bg-green-900/30 text-green-400" :
+                    gen.status === "running" ? "bg-yellow-900/30 text-yellow-400" :
+                    "bg-gray-800/30 text-gray-400"
+                  }`}>
+                    {gen.status}
+                  </span>
+                </div>
+              </div>
+            ))}
+            {project.fragments.length > 0 && project.generations.length === 0 && (
+              <div
+                onClick={() => setViewMode("detail")}
+                className="bg-[var(--bg-card)] border border-[var(--border-color)] rounded-xl p-4 cursor-pointer hover:border-[var(--border-light)] transition-all"
+              >
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-sm font-semibold">{project.name}</h3>
+                    <p className="text-xs text-[var(--text-muted)] mt-1">
+                      {project.fragments.length} fragments
+                    </p>
+                  </div>
+                  <span className="text-xs px-2 py-0.5 rounded-full bg-gray-800/30 text-gray-400">
+                    {project.status}
+                  </span>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // Detail view - shows fragments grid
+  const completedFragments = project.fragments.filter((f) => f.status === "completed").length;
   const totalFragments = project.fragments.length;
   const totalDuration = project.fragments
     .filter((f) => f.duration)
     .reduce((sum, f) => sum + (f.duration || 0), 0);
 
-  const currentGeneration = project.generations?.[0];
+  const isGenerating = project.status === "generating" || project.status === "transcribing";
 
   return (
     <div className="p-6">
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="mb-4">
         <h1 className="text-xl font-bold">{project.name}</h1>
+        <button
+          onClick={() => setViewMode("list")}
+          className="flex items-center gap-1.5 text-sm text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors mt-1"
+        >
+          <ArrowLeft size={14} />
+          Back to generations
+        </button>
       </div>
 
       {/* Status Bar */}
-      {totalFragments > 0 && (
+      {(totalFragments > 0 || isGenerating) && (
         <div className="mb-6">
           <StatusBar
             status={
-              rendering
-                ? "running"
-                : project.status === "completed"
-                ? "completed"
-                : completedFragments === totalFragments && totalFragments > 0
-                ? "completed"
-                : completedFragments > 0
-                ? "running"
-                : "pending"
+              rendering ? "running" :
+              isGenerating ? "running" :
+              project.status === "completed" ? "completed" :
+              completedFragments === totalFragments && totalFragments > 0 ? "completed" :
+              completedFragments > 0 ? "running" : "pending"
             }
             completedFragments={completedFragments}
             totalFragments={totalFragments}
@@ -188,9 +256,8 @@ export default function GenerationsPage() {
               project.audioDuration ? formatTime(project.audioDuration) : undefined
             }
             elapsed={rendering ? formatTime(elapsedSeconds) : undefined}
-            onRender={
-              completedFragments > 0 && !rendering ? handleRender : undefined
-            }
+            onCancel={isGenerating ? () => {} : undefined}
+            onRender={completedFragments > 0 && !rendering ? handleRender : undefined}
           />
         </div>
       )}
@@ -239,16 +306,23 @@ export default function GenerationsPage() {
       {/* Fragments Grid */}
       {totalFragments === 0 ? (
         <div className="text-center py-20 text-[var(--text-secondary)]">
-          <FolderOpen size={48} className="mx-auto mb-4 text-[var(--text-muted)]" />
-          <p className="text-lg mb-2">No fragments yet</p>
-          <p className="text-sm text-[var(--text-muted)]">
-            Generate prompts first, then use them in Flow to create video fragments.
-            <br />
-            Upload the generated fragments here.
-          </p>
+          {isGenerating ? (
+            <>
+              <Loader2 size={32} className="mx-auto mb-4 text-[var(--text-muted)] animate-spin" />
+              <p className="text-lg mb-2">Segments are being generated...</p>
+            </>
+          ) : (
+            <>
+              <FolderOpen size={48} className="mx-auto mb-4 text-[var(--text-muted)]" />
+              <p className="text-lg mb-2">No fragments yet</p>
+              <p className="text-sm text-[var(--text-muted)]">
+                Generate prompts first, then upload the generated video fragments here.
+              </p>
+            </>
+          )}
         </div>
       ) : (
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
           {project.fragments.map((fragment) => (
             <FragmentCard
               key={fragment.id}

@@ -21,7 +21,7 @@ export default async function Home() {
             IA
           </div>
           <h1 className="text-xl font-semibold text-[var(--text-primary)]">IntensAI</h1>
-          <span className="text-xs text-[var(--text-muted)] ml-2">v0.1.0</span>
+          <span className="text-xs text-[var(--text-muted)] ml-2">v0.2.1</span>
         </div>
         <CreateProjectButton />
       </header>

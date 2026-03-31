@@ -11,6 +11,7 @@ model Project {
   id              String       @id @default(uuid())
   name            String
   promptTemplate  String       @default("CINEMA TAINS")
+  templateId      String?
   flowMode        String       @default("image-to-video")
   aiVersion       String       @default("veo-3.1")
   staticSeed      Boolean      @default(false)
@@ -29,6 +30,8 @@ model Project {
 
   createdAt       DateTime     @default(now())
   updatedAt       DateTime     @updatedAt
+
+  template        PromptTemplate? @relation(fields: [templateId], references: [id])
 
   fragments       Fragment[]
   generations     Generation[]
@@ -67,4 +70,19 @@ model Generation {
   updatedAt     DateTime @updatedAt
 
   project       Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+}
+
+model PromptTemplate {
+  id             String   @id @default(uuid())
+  name           String
+  stylePrompt    String   @default("")
+  negativePrompt String   @default("")
+  techPrompt     String   @default("")
+  indexFormat    String   @default("")
+  isDefault      Boolean  @default(false)
+
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  projects       Project[]
 }

@@ -2,361 +2,264 @@
 
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
-import { FileText, Loader2, Copy, Download, Sparkles, Clock, ChevronDown, ChevronUp } from "lucide-react";
+import { Search, Pencil, Plus, Copy, X, Save, Trash2 } from "lucide-react";
 
-interface Project {
+interface Template {
   id: string;
   name: string;
-  transcriptTxt: string | null;
-  transcriptJson: string | null;
-  prompts: string | null;
-  promptCount: number;
-  status: string;
-  audioPath: string | null;
+  stylePrompt: string;
+  negativePrompt: string;
+  techPrompt: string;
+  indexFormat: string;
+  isDefault: boolean;
+  tag?: string;
 }
 
 export default function PromptsPage() {
   const params = useParams();
   const projectId = params.id as string;
-  const [project, setProject] = useState<Project | null>(null);
-  const [transcribing, setTranscribing] = useState(false);
-  const [generating, setGenerating] = useState(false);
-  const [specialPrompt, setSpecialPrompt] = useState("");
-  const [prompts, setPrompts] = useState<string[]>([]);
-  const [copied, setCopied] = useState(false);
-  const [showTimestamps, setShowTimestamps] = useState(false);
-  const [aiProvider, setAiProvider] = useState<"gemini" | "openai">("gemini");
-  const [aiModel, setAiModel] = useState("");
+  const [templates, setTemplates] = useState<Template[]>([]);
+  const [search, setSearch] = useState("");
+  const [editingTemplate, setEditingTemplate] = useState<Template | null>(null);
+  const [isNewTemplate, setIsNewTemplate] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    fetch(`/api/projects/${projectId}`)
+    fetch("/api/templates")
       .then((r) => r.json())
-      .then((p: Project) => {
-        setProject(p);
-        if (p.prompts) {
-          try {
-            setPrompts(JSON.parse(p.prompts));
-          } catch {}
-        }
-      });
-  }, [projectId]);
+      .then(setTemplates);
+  }, []);
 
-  const handleTranscribe = async () => {
-    if (!project?.audioPath) {
-      alert("Upload audio first in General tab");
-      return;
-    }
+  const filtered = templates.filter((t) =>
+    t.name.toLowerCase().includes(search.toLowerCase())
+  );
 
-    setTranscribing(true);
-    try {
-      const res = await fetch("/api/transcribe", {
+  const handleCreate = () => {
+    setEditingTemplate({
+      id: "",
+      name: "New Template",
+      stylePrompt: "",
+      negativePrompt: "",
+      techPrompt: "",
+      indexFormat: "",
+      isDefault: false,
+    });
+    setIsNewTemplate(true);
+  };
+
+  const handleSave = async () => {
+    if (!editingTemplate) return;
+    setSaving(true);
+
+    if (isNewTemplate) {
+      const res = await fetch("/api/templates", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ projectId }),
+        body: JSON.stringify(editingTemplate),
       });
-      const data = await res.json();
-      if (res.ok) {
-        setProject((p) =>
-          p ? { ...p, transcriptTxt: data.text, transcriptJson: JSON.stringify(data.timestamps), status: "draft" } : p
-        );
-      } else {
-        alert(data.error || "Transcription failed");
-      }
-    } catch (err) {
-      console.error(err);
-      alert("Transcription failed");
-    } finally {
-      setTranscribing(false);
-    }
-  };
-
-  const handleGeneratePrompts = async () => {
-    if (!project?.transcriptTxt) {
-      alert("Transcribe audio first");
-      return;
-    }
-
-    setGenerating(true);
-    try {
-      const res = await fetch("/api/generate-prompts", {
-        method: "POST",
+      const created = await res.json();
+      setTemplates((t) => [created, ...t]);
+    } else {
+      await fetch(`/api/templates/${editingTemplate.id}`, {
+        method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ projectId, specialPrompt, aiProvider, aiModel: aiModel || undefined }),
+        body: JSON.stringify(editingTemplate),
       });
-      const data = await res.json();
-      if (res.ok) {
-        setPrompts(data.prompts);
-        setProject((p) =>
-          p ? { ...p, prompts: JSON.stringify(data.prompts), promptCount: data.count, status: "ready" } : p
-        );
-      } else {
-        alert(data.error || "Prompt generation failed. Check that GEMINI_API_KEY is set.");
-      }
-    } catch (err) {
-      console.error(err);
-      alert("Generation failed");
-    } finally {
-      setGenerating(false);
+      setTemplates((t) =>
+        t.map((tmpl) => (tmpl.id === editingTemplate.id ? editingTemplate : tmpl))
+      );
     }
+
+    setEditingTemplate(null);
+    setIsNewTemplate(false);
+    setSaving(false);
   };
 
-  const copyAllPrompts = () => {
-    const text = prompts.join("\n---\n");
-    navigator.clipboard.writeText(text);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+  const handleDelete = async (id: string) => {
+    if (!confirm("Delete this template?")) return;
+    await fetch(`/api/templates/${id}`, { method: "DELETE" });
+    setTemplates((t) => t.filter((tmpl) => tmpl.id !== id));
   };
 
-  const downloadPrompts = () => {
-    const text = JSON.stringify(prompts, null, 2);
-    const blob = new Blob([text], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `prompts-${projectId}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
+  const handleCopy = async (template: Template) => {
+    const res = await fetch("/api/templates", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        ...template,
+        id: undefined,
+        name: `${template.name} (copy)`,
+      }),
+    });
+    const created = await res.json();
+    setTemplates((t) => [created, ...t]);
   };
-
-  if (!project) {
-    return (
-      <div className="flex items-center justify-center h-full">
-        <div className="animate-spin w-8 h-8 border-2 border-[var(--accent)] border-t-transparent rounded-full" />
-      </div>
-    );
-  }
 
   return (
-    <div className="max-w-3xl mx-auto p-8">
-      {/* Step 1: Transcription */}
-      <div className="mb-10">
-        <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
-          <FileText size={20} />
-          Step 1: Transcription
-        </h2>
-
-        {!project.audioPath ? (
-          <p className="text-sm text-[var(--text-muted)]">
-            Upload audio first in the General tab
-          </p>
-        ) : !project.transcriptTxt ? (
+    <div className="h-full flex flex-col">
+      {/* Top bar */}
+      <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--border-color)]">
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1.5 bg-[var(--bg-card)] border border-[var(--border-color)] rounded-lg px-3 py-1.5 text-sm">
+            <span>All</span>
+            <span className="text-[var(--text-muted)] text-xs">{templates.length}</span>
+          </div>
+        </div>
+        <div className="flex items-center gap-3">
           <button
-            onClick={handleTranscribe}
-            disabled={transcribing}
-            className="flex items-center gap-2 px-5 py-2.5 bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
+            onClick={() => {
+              if (editingTemplate) {
+                setEditingTemplate(null);
+                setIsNewTemplate(false);
+              }
+            }}
+            className="w-8 h-8 flex items-center justify-center text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors"
           >
-            {transcribing ? (
-              <>
-                <Loader2 size={16} className="animate-spin" />
-                Transcribing...
-              </>
-            ) : (
-              <>
-                <FileText size={16} />
-                Start Transcription
-              </>
-            )}
+            <Pencil size={16} />
           </button>
-        ) : (
-          <div className="space-y-3">
-            {/* Transcript Text */}
-            <div className="bg-[var(--bg-card)] border border-[var(--border-color)] rounded-xl p-4">
-              <div className="flex items-center justify-between mb-3">
-                <span className="text-sm font-medium text-green-400">✓ Transcription complete</span>
-                <div className="flex items-center gap-3">
-                  <button
-                    onClick={() => {
-                      const blob = new Blob([project.transcriptTxt || ""], { type: "text/plain" });
-                      const url = URL.createObjectURL(blob);
-                      const a = document.createElement("a");
-                      a.href = url;
-                      a.download = "transcript.txt";
-                      a.click();
-                      URL.revokeObjectURL(url);
-                    }}
-                    className="text-xs text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors flex items-center gap-1"
-                  >
-                    <Download size={12} />
-                    TXT
-                  </button>
-                  <button
-                    onClick={handleTranscribe}
-                    disabled={transcribing}
-                    className="text-xs text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors"
-                  >
-                    {transcribing ? "Retranscribing..." : "Retranscribe"}
-                  </button>
-                </div>
-              </div>
-              <div className="max-h-48 overflow-y-auto text-sm text-[var(--text-secondary)] leading-relaxed">
-                {project.transcriptTxt}
-              </div>
-            </div>
+          <div className="relative">
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)]" />
+            <input
+              type="text"
+              placeholder="Search prompt"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="pl-8 pr-3 py-1.5 w-[180px] text-sm rounded-lg"
+            />
+          </div>
+        </div>
+      </div>
 
-            {/* Timestamps JSON */}
-            {project.transcriptJson && (
-              <div className="bg-[var(--bg-card)] border border-[var(--border-color)] rounded-xl p-4">
-                <div className="flex items-center justify-between mb-2">
-                  <button
-                    onClick={() => setShowTimestamps(!showTimestamps)}
-                    className="text-sm font-medium text-[var(--text-primary)] flex items-center gap-2 hover:text-[var(--accent)] transition-colors"
-                  >
-                    <Clock size={14} />
-                    Timestamps JSON ({JSON.parse(project.transcriptJson).length} words)
-                    {showTimestamps ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-                  </button>
-                  <button
-                    onClick={() => {
-                      const formatted = JSON.stringify(JSON.parse(project.transcriptJson!), null, 2);
-                      const blob = new Blob([formatted], { type: "application/json" });
-                      const url = URL.createObjectURL(blob);
-                      const a = document.createElement("a");
-                      a.href = url;
-                      a.download = "timestamps.json";
-                      a.click();
-                      URL.revokeObjectURL(url);
-                    }}
-                    className="text-xs text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors flex items-center gap-1"
-                  >
-                    <Download size={12} />
-                    JSON
-                  </button>
-                </div>
-                {showTimestamps && (
-                  <div className="max-h-64 overflow-y-auto text-xs text-[var(--text-secondary)] font-mono bg-[var(--bg-primary)] rounded-lg p-3">
-                    <pre>{JSON.stringify(JSON.parse(project.transcriptJson), null, 2)}</pre>
+      {/* Content */}
+      <div className="flex-1 overflow-auto p-6">
+        {editingTemplate ? (
+          /* Template Editor */
+          <div className="max-w-2xl mx-auto bg-[var(--bg-card)] border border-[var(--border-color)] rounded-xl p-6 space-y-4">
+            <h3 className="text-lg font-semibold mb-2">
+              {isNewTemplate ? "Create New Prompt" : "Edit Prompt"}
+            </h3>
+            <div>
+              <label className="block text-xs text-[var(--text-muted)] mb-1">Template Name</label>
+              <input
+                type="text"
+                value={editingTemplate.name}
+                onChange={(e) => setEditingTemplate({ ...editingTemplate, name: e.target.value })}
+                className="w-full text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-[var(--text-muted)] mb-1">Style Prompt</label>
+              <textarea
+                value={editingTemplate.stylePrompt}
+                onChange={(e) => setEditingTemplate({ ...editingTemplate, stylePrompt: e.target.value })}
+                rows={4}
+                placeholder="Visual style, mood, color palette, camera angles..."
+                className="w-full text-sm resize-y"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-[var(--text-muted)] mb-1">Negative Prompt</label>
+              <textarea
+                value={editingTemplate.negativePrompt}
+                onChange={(e) => setEditingTemplate({ ...editingTemplate, negativePrompt: e.target.value })}
+                rows={3}
+                placeholder="What to avoid: blur, low quality, text..."
+                className="w-full text-sm resize-y"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-[var(--text-muted)] mb-1">Tech Prompt</label>
+              <textarea
+                value={editingTemplate.techPrompt}
+                onChange={(e) => setEditingTemplate({ ...editingTemplate, techPrompt: e.target.value })}
+                rows={3}
+                placeholder="Technical instructions for prompt generation..."
+                className="w-full text-sm resize-y"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-[var(--text-muted)] mb-1">Index Format</label>
+              <input
+                type="text"
+                value={editingTemplate.indexFormat}
+                onChange={(e) => setEditingTemplate({ ...editingTemplate, indexFormat: e.target.value })}
+                placeholder='e.g. "1. [prompt text]"'
+                className="w-full text-sm"
+              />
+            </div>
+            <div className="flex items-center gap-2 pt-2">
+              <button
+                onClick={handleSave}
+                disabled={saving}
+                className="flex items-center gap-1.5 px-4 py-2 bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-white rounded-lg text-sm font-medium transition-colors"
+              >
+                <Save size={14} />
+                Save
+              </button>
+              <button
+                onClick={() => { setEditingTemplate(null); setIsNewTemplate(false); }}
+                className="flex items-center gap-1.5 px-4 py-2 bg-[var(--bg-input)] border border-[var(--border-color)] rounded-lg text-sm transition-colors"
+              >
+                <X size={14} />
+                Cancel
+              </button>
+            </div>
+          </div>
+        ) : filtered.length === 0 ? (
+          <div className="text-center py-20 text-[var(--text-muted)]">
+            {search ? "No matching templates" : "No prompts yet"}
+          </div>
+        ) : (
+          /* Template Cards Grid */
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {filtered.map((template) => (
+              <div
+                key={template.id}
+                className="bg-[var(--bg-card)] border border-[var(--border-color)] rounded-xl p-5 hover:border-[var(--border-light)] transition-all group cursor-pointer"
+                onClick={() => { setEditingTemplate(template); setIsNewTemplate(false); }}
+              >
+                <div className="flex items-start justify-between mb-3">
+                  <h3 className="text-sm font-semibold text-[var(--text-primary)]">
+                    {template.name}
+                  </h3>
+                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button
+                      onClick={(e) => { e.stopPropagation(); handleCopy(template); }}
+                      className="p-1 text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors"
+                      title="Duplicate"
+                    >
+                      <Copy size={14} />
+                    </button>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); handleDelete(template.id); }}
+                      className="p-1 text-[var(--text-muted)] hover:text-[var(--error)] transition-colors"
+                      title="Delete"
+                    >
+                      <Trash2 size={14} />
+                    </button>
                   </div>
-                )}
+                </div>
+                <p className="text-xs text-[var(--text-muted)]">
+                  {template.stylePrompt
+                    ? template.stylePrompt.slice(0, 60) + (template.stylePrompt.length > 60 ? "..." : "")
+                    : "No tag"}
+                </p>
               </div>
-            )}
+            ))}
           </div>
         )}
       </div>
 
-      {/* Step 2: Special Prompt */}
-      <div className="mb-10">
-        <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
-          <Sparkles size={20} />
-          Step 2: Generate Video Prompts
-        </h2>
-
-        {/* AI Provider Selection */}
-        <div className="mb-4 flex gap-4">
-          <div className="flex-1">
-            <label className="block text-sm text-[var(--text-secondary)] mb-2">
-              AI Provider
-            </label>
-            <select
-              value={aiProvider}
-              onChange={(e) => {
-                const provider = e.target.value as "gemini" | "openai";
-                setAiProvider(provider);
-                setAiModel("");
-              }}
-              className="w-full text-sm"
-            >
-              <option value="gemini">Google Gemini</option>
-              <option value="openai">OpenAI GPT</option>
-            </select>
-          </div>
-          <div className="flex-1">
-            <label className="block text-sm text-[var(--text-secondary)] mb-2">
-              Model
-            </label>
-            <select
-              value={aiModel}
-              onChange={(e) => setAiModel(e.target.value)}
-              className="w-full text-sm"
-            >
-              {aiProvider === "gemini" ? (
-                <>
-                  <option value="">gemini-2.0-flash (default)</option>
-                  <option value="gemini-2.5-pro-preview-06-05">gemini-2.5-pro</option>
-                  <option value="gemini-2.5-flash-preview-05-20">gemini-2.5-flash</option>
-                  <option value="gemini-2.0-flash-lite">gemini-2.0-flash-lite</option>
-                </>
-              ) : (
-                <>
-                  <option value="">gpt-4o (default)</option>
-                  <option value="gpt-4o-mini">gpt-4o-mini</option>
-                  <option value="gpt-4.1">gpt-4.1</option>
-                  <option value="gpt-4.1-mini">gpt-4.1-mini</option>
-                  <option value="gpt-4.1-nano">gpt-4.1-nano</option>
-                  <option value="o3-mini">o3-mini</option>
-                </>
-              )}
-            </select>
-          </div>
-        </div>
-
-        <div className="mb-4">
-          <label className="block text-sm text-[var(--text-secondary)] mb-2">
-            Special prompt (your style instructions)
-          </label>
-          <textarea
-            value={specialPrompt}
-            onChange={(e) => setSpecialPrompt(e.target.value)}
-            rows={6}
-            placeholder="Enter your special prompt that defines the visual style, mood, and details for video generation..."
-            className="w-full text-sm resize-y min-h-[100px]"
-          />
-        </div>
-
-        <button
-          onClick={handleGeneratePrompts}
-          disabled={generating || !project.transcriptTxt}
-          className="flex items-center gap-2 px-5 py-2.5 bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
-        >
-          {generating ? (
-            <>
-              <Loader2 size={16} className="animate-spin" />
-              Generating prompts...
-            </>
-          ) : (
-            <>
-              <Sparkles size={16} />
-              Generate Prompts
-            </>
-          )}
-        </button>
-      </div>
-
-      {/* Step 3: Prompts list */}
-      {prompts.length > 0 && (
-        <div>
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold">
-              Generated Prompts ({prompts.length})
-            </h2>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={copyAllPrompts}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-[var(--bg-card)] border border-[var(--border-color)] hover:border-[var(--border-light)] rounded-lg text-sm transition-colors"
-              >
-                <Copy size={14} />
-                {copied ? "Copied!" : "Copy All"}
-              </button>
-              <button
-                onClick={downloadPrompts}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-[var(--bg-card)] border border-[var(--border-color)] hover:border-[var(--border-light)] rounded-lg text-sm transition-colors"
-              >
-                <Download size={14} />
-                Download JSON
-              </button>
-            </div>
-          </div>
-
-          <div className="space-y-2 max-h-[600px] overflow-y-auto">
-            {prompts.map((prompt, i) => (
-              <div
-                key={i}
-                className="bg-[var(--bg-card)] border border-[var(--border-color)] rounded-lg p-3 text-sm"
-              >
-                <span className="text-[var(--accent)] font-semibold mr-2">#{i + 1}</span>
-                <span className="text-[var(--text-secondary)]">{prompt}</span>
-              </div>
-            ))}
-          </div>
+      {/* Bottom action */}
+      {!editingTemplate && (
+        <div className="flex justify-end px-6 py-4 border-t border-[var(--border-color)]">
+          <button
+            onClick={handleCreate}
+            className="flex items-center gap-2 px-5 py-2.5 bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-white rounded-xl text-sm font-medium transition-colors"
+          >
+            Create new prompt
+            <Plus size={16} />
+          </button>
         </div>
       )}
     </div>

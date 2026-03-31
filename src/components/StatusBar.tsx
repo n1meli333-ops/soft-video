@@ -1,5 +1,7 @@
 "use client";
 
+import { FolderOpen } from "lucide-react";
+
 interface StatusBarProps {
   status: string;
   completedFragments: number;
@@ -17,9 +19,9 @@ export function StatusBar({
   completedFragments,
   totalFragments,
   duration,
-  estimatedDuration,
   elapsed,
   onCancel,
+  onOpenFolder,
   onRender,
 }: StatusBarProps) {
   const progress = totalFragments > 0 ? (completedFragments / totalFragments) * 100 : 0;
@@ -68,12 +70,7 @@ export function StatusBar({
       {duration && (
         <div className="flex flex-col items-center">
           <span className="text-[10px] text-[var(--text-muted)] uppercase tracking-wider">Duration</span>
-          <span className="text-sm font-bold text-[var(--text-primary)]">
-            {duration}
-            {estimatedDuration && (
-              <span className="text-[var(--text-muted)] font-normal text-xs"> ({estimatedDuration})</span>
-            )}
-          </span>
+          <span className="text-sm font-bold text-[var(--text-primary)]">{duration}</span>
         </div>
       )}
 
@@ -86,21 +83,29 @@ export function StatusBar({
       )}
 
       {/* Actions */}
-      <div className="flex items-center gap-2 ml-auto">
+      <div className="flex items-center gap-3 ml-auto">
         {status === "running" && onCancel && (
           <button
             onClick={onCancel}
             className="text-sm text-[var(--text-secondary)] hover:text-[var(--error)] transition-colors flex items-center gap-1"
           >
-            × Cancel
+            &times; Cancel
           </button>
         )}
+        <button
+          onClick={onOpenFolder}
+          className="text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors flex items-center gap-1.5"
+        >
+          <FolderOpen size={14} />
+          Open folder
+        </button>
         {onRender && (
           <button
             onClick={onRender}
-            className="px-4 py-1.5 bg-[var(--bg-input)] border border-[var(--border-color)] hover:border-[var(--border-light)] rounded-lg text-sm transition-colors flex items-center gap-1"
+            className="px-4 py-1.5 bg-[var(--bg-input)] border border-[var(--border-color)] hover:border-[var(--border-light)] rounded-lg text-sm transition-colors flex items-center gap-1.5"
           >
-            ▶ Render
+            <span className="text-[var(--accent)]">&#9654;</span>
+            Render
           </button>
         )}
       </div>
