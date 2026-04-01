@@ -20,11 +20,13 @@ export async function getBrowser(): Promise<Browser> {
   fs.mkdirSync(USER_DATA_DIR, { recursive: true });
 
   browser = await chromium.launch({
-    headless: false, // Must be visible for Google login & flow interaction
+    headless: false, // Xvfb provides virtual display on VPS
     args: [
       "--no-sandbox",
       "--disable-setuid-sandbox",
       "--disable-blink-features=AutomationControlled",
+      "--disable-dev-shm-usage",
+      "--disable-gpu",
     ],
   });
 
