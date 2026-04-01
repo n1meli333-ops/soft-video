@@ -16,7 +16,6 @@ export async function POST(req: NextRequest) {
   const project = await prisma.project.create({
     data: {
       name: body.name || "New Project",
-      promptTemplate: body.promptTemplate || "CINEMA TAINS",
     },
   });
   return NextResponse.json(project);
