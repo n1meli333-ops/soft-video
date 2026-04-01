@@ -10,12 +10,8 @@ datasource db {
 model Project {
   id              String       @id @default(uuid())
   name            String
-  promptTemplate  String       @default("CINEMA TAINS")
   templateId      String?
-  flowMode        String       @default("image-to-video")
-  aiVersion       String       @default("veo-3.1")
-  staticSeed      Boolean      @default(false)
-  refineLogic     Boolean      @default(false)
+  flowMode        String       @default("image-to-video") // image-to-video, text-to-video
 
   audioPath       String?
   audioDuration   Float?
@@ -26,7 +22,14 @@ model Project {
   prompts         String?      // JSON array of generated prompts
   promptCount     Int          @default(0)
 
-  status          String       @default("draft") // draft, transcribing, generating, ready, rendering, completed
+  // Pipeline stage: draft, transcribing, generating_prompts, generating_images, generating_videos, rendering, completed, failed, cancelled
+  status          String       @default("draft")
+  statusMessage   String?      // Human-readable status message
+  progress        Float        @default(0) // 0-100 percentage
+  currentStage    String?      // Current pipeline stage name
+
+  outputPath      String?      // Final rendered video path
+  errorMessage    String?      // Last error message
 
   createdAt       DateTime     @default(now())
   updatedAt       DateTime     @updatedAt
@@ -35,6 +38,7 @@ model Project {
 
   fragments       Fragment[]
   generations     Generation[]
+  activities      Activity[]
 }
 
 model Fragment {
@@ -42,10 +46,13 @@ model Fragment {
   projectId    String
   index        Int
   prompt       String
+  imagePath    String?   // Generated image path (for image-to-video flow)
   videoPath    String?
   thumbnailPath String?
   duration     Float?
-  status       String   @default("pending") // pending, generating, completed, failed
+  status       String   @default("pending") // pending, generating_image, generating_video, completed, failed
+  errorMessage String?
+  retryCount   Int      @default(0)
 
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
@@ -58,7 +65,7 @@ model Fragment {
 model Generation {
   id            String   @id @default(uuid())
   projectId     String
-  status        String   @default("pending") // pending, running, completed, cancelled
+  status        String   @default("pending") // pending, running, completed, cancelled, failed
   totalFragments Int     @default(0)
   completedFragments Int @default(0)
   duration      Float?
@@ -78,11 +85,25 @@ model PromptTemplate {
   stylePrompt    String   @default("")
   negativePrompt String   @default("")
   techPrompt     String   @default("")
-  indexFormat    String   @default("")
+  indexFormat     String   @default("")
   isDefault      Boolean  @default(false)
 
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
   projects       Project[]
+}
+
+model Activity {
+  id          String   @id @default(uuid())
+  projectId   String
+  type        String   // info, success, error, warning, progress
+  stage       String?  // pipeline stage
+  message     String
+  details     String?  // optional extra info
+  progress    Float?   // 0-100
+
+  createdAt   DateTime @default(now())
+
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
 }

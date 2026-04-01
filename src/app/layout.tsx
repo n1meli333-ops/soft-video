@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "IntensAI — Video Generator",
+  title: "Aura-I — Video Generator",
   description: "AI-powered YouTube video generator",
 };
 

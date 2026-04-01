@@ -1,13 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { generateVideoPrompts } from "@/lib/gemini";
 
 export async function POST(
-  req: NextRequest,
+  _req: NextRequest,
   { params }: { params: Promise<{ id: string; fragmentId: string }> }
 ) {
   const { id, fragmentId } = await params;
-  const body = await req.json();
 
   const fragment = await prisma.fragment.findUnique({
     where: { id: fragmentId },
@@ -17,34 +15,27 @@ export async function POST(
     return NextResponse.json({ error: "Fragment not found" }, { status: 404 });
   }
 
-  try {
-    const regeneratePrompt = body.regeneratePrompt || "Rewrite this video prompt to avoid content policy issues while keeping the same visual intent. Make it safe for AI video generation.";
+  // Reset fragment status — the worker will pick it up and regenerate
+  await prisma.fragment.update({
+    where: { id: fragmentId },
+    data: {
+      status: "pending",
+      videoPath: null,
+      imagePath: null,
+      thumbnailPath: null,
+      errorMessage: null,
+      retryCount: { increment: 1 },
+    },
+  });
 
-    const prompts = await generateVideoPrompts({
-      transcriptText: fragment.prompt,
-      timestampsJson: "[]",
-      specialPrompt: regeneratePrompt,
-      aiProvider: body.aiProvider || "gemini",
-      aiModel: body.aiModel || undefined,
-      batchSize: 1,
-    });
+  await prisma.activity.create({
+    data: {
+      projectId: id,
+      type: "info",
+      stage: "generating_videos",
+      message: `Fragment #${fragment.index + 1} queued for regeneration`,
+    },
+  });
 
-    const newPrompt = prompts[0] || fragment.prompt;
-
-    await prisma.fragment.update({
-      where: { id: fragmentId },
-      data: {
-        prompt: newPrompt,
-        status: "pending",
-        videoPath: null,
-        thumbnailPath: null,
-      },
-    });
-
-    return NextResponse.json({ prompt: newPrompt, status: "pending" });
-  } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : "Regeneration failed";
-    console.error("Regeneration error:", error);
-    return NextResponse.json({ error: message }, { status: 500 });
-  }
+  return NextResponse.json({ status: "pending" });
 }

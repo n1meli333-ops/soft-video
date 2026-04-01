@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { prisma } from "@/lib/db";
 import { CreateProjectButton } from "@/components/CreateProjectButton";
+import { ProjectCard } from "@/components/ProjectCard";
 
 export const dynamic = "force-dynamic";
 
@@ -18,10 +19,10 @@ export default async function Home() {
       <header className="border-b border-[var(--border-color)] px-6 py-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 bg-[var(--accent)] rounded-lg flex items-center justify-center text-white font-bold text-sm">
-            IA
+            AI
           </div>
-          <h1 className="text-xl font-semibold text-[var(--text-primary)]">IntensAI</h1>
-          <span className="text-xs text-[var(--text-muted)] ml-2">v0.2.1</span>
+          <h1 className="text-xl font-semibold text-[var(--text-primary)]">Aura-I</h1>
+          <span className="text-xs text-[var(--text-muted)] ml-2">v0.3.0</span>
         </div>
         <CreateProjectButton />
       </header>
@@ -37,35 +38,15 @@ export default async function Home() {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
             {projects.map((project) => (
-              <Link
+              <ProjectCard
                 key={project.id}
-                href={`/project/${project.id}`}
-                className="block bg-[var(--bg-card)] border border-[var(--border-color)] rounded-xl p-5 hover:bg-[var(--bg-card-hover)] hover:border-[var(--border-light)] transition-all"
-              >
-                <h3 className="font-semibold text-lg mb-2">{project.name}</h3>
-                <div className="flex items-center gap-3 text-sm text-[var(--text-secondary)]">
-                  <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs ${
-                    project.status === "completed"
-                      ? "bg-green-900/30 text-green-400"
-                      : project.status === "draft"
-                      ? "bg-gray-800/30 text-gray-400"
-                      : "bg-yellow-900/30 text-yellow-400"
-                  }`}>
-                    <span className={`w-1.5 h-1.5 rounded-full ${
-                      project.status === "completed"
-                        ? "bg-green-400"
-                        : project.status === "draft"
-                        ? "bg-gray-400"
-                        : "bg-yellow-400"
-                    }`} />
-                    {project.status}
-                  </span>
-                  <span>{project._count.fragments} fragments</span>
-                </div>
-                <p className="text-xs text-[var(--text-muted)] mt-3">
-                  {new Date(project.updatedAt).toLocaleDateString()}
-                </p>
-              </Link>
+                id={project.id}
+                name={project.name}
+                status={project.status}
+                fragmentCount={project._count.fragments}
+                progress={project.progress}
+                updatedAt={project.updatedAt.toISOString()}
+              />
             ))}
           </div>
         )}

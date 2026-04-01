@@ -4,76 +4,73 @@ import { useEffect, useState, useCallback, useRef } from "react";
 import { useParams } from "next/navigation";
 import { FragmentCard } from "@/components/FragmentCard";
 import { StatusBar } from "@/components/StatusBar";
-import { Upload, Loader2, FolderOpen, ArrowLeft, X as XIcon } from "lucide-react";
+import { Loader2, FolderOpen, Download, Square } from "lucide-react";
 
 interface Fragment {
   id: string;
   index: number;
   prompt: string;
+  imagePath: string | null;
   videoPath: string | null;
   thumbnailPath: string | null;
   duration: number | null;
   status: string;
-}
-
-interface Generation {
-  id: string;
-  status: string;
-  totalFragments: number;
-  completedFragments: number;
-  duration: number | null;
-  elapsed: number | null;
-  createdAt: string;
+  errorMessage: string | null;
 }
 
 interface Project {
   id: string;
   name: string;
   status: string;
+  statusMessage: string | null;
+  progress: number;
+  currentStage: string | null;
   audioDuration: number | null;
+  outputPath: string | null;
+  errorMessage: string | null;
   fragments: Fragment[];
-  generations: Generation[];
 }
+
+const STAGES = [
+  { key: "transcribing", label: "Transcribing" },
+  { key: "generating_prompts", label: "Prompts" },
+  { key: "generating_images", label: "Images" },
+  { key: "generating_videos", label: "Videos" },
+  { key: "rendering", label: "Rendering" },
+];
 
 export default function GenerationsPage() {
   const params = useParams();
   const projectId = params.id as string;
   const [project, setProject] = useState<Project | null>(null);
-  const [uploading, setUploading] = useState(false);
-  const [rendering, setRendering] = useState(false);
   const [selectedPrompt, setSelectedPrompt] = useState<string | null>(null);
+  const [regeneratingId, setRegeneratingId] = useState<string | null>(null);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
-  const [viewMode, setViewMode] = useState<"list" | "detail">("list");
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
 
   const fetchProject = useCallback(async () => {
     const res = await fetch(`/api/projects/${projectId}`);
     const data: Project = await res.json();
     setProject(data);
-    // Auto-switch to detail if there are fragments
-    if (data.fragments.length > 0 || data.status === "generating" || data.status === "ready") {
-      setViewMode("detail");
-    }
   }, [projectId]);
 
   useEffect(() => {
     fetchProject();
   }, [fetchProject]);
 
-  // Poll for updates when generating
+  // Poll for updates when pipeline is running
+  const isRunning = project && ["transcribing", "generating_prompts", "generating_images", "generating_videos", "rendering"].includes(project.status);
+
   useEffect(() => {
-    if (!project) return;
-    if (project.status === "generating" || project.status === "transcribing") {
-      const interval = setInterval(fetchProject, 5000);
+    if (isRunning) {
+      const interval = setInterval(fetchProject, 3000);
       return () => clearInterval(interval);
     }
-  }, [project?.status, fetchProject]);
+  }, [isRunning, fetchProject]);
 
-  // Timer for elapsed time during rendering
+  // Elapsed timer
   useEffect(() => {
-    if (rendering) {
-      setElapsedSeconds(0);
+    if (isRunning) {
       timerRef.current = setInterval(() => {
         setElapsedSeconds((s) => s + 1);
       }, 1000);
@@ -86,67 +83,39 @@ export default function GenerationsPage() {
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
     };
-  }, [rendering]);
+  }, [isRunning]);
 
-  const handleUploadFragments = async (files: FileList) => {
-    setUploading(true);
-    try {
-      const formData = new FormData();
-      formData.append("projectId", projectId);
-      const sortedFiles = Array.from(files).sort((a, b) =>
-        a.name.localeCompare(b.name, undefined, { numeric: true })
-      );
-      for (const file of sortedFiles) {
-        formData.append("fragments", file);
-      }
-      const res = await fetch("/api/upload-fragments", {
-        method: "POST",
-        body: formData,
-      });
-      if (res.ok) {
-        await fetchProject();
-      } else {
-        const data = await res.json();
-        alert(data.error || "Upload failed");
-      }
-    } catch (err) {
-      console.error("Upload error:", err);
-      alert("Upload failed");
-    } finally {
-      setUploading(false);
-    }
+  const handleStop = async () => {
+    await fetch(`/api/projects/${projectId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: "cancelled", statusMessage: "Cancelled by user" }),
+    });
+    fetchProject();
   };
 
-  const handleRender = async () => {
-    setRendering(true);
+  const handleRegenerate = async (fragmentId: string) => {
+    setRegeneratingId(fragmentId);
     try {
-      const res = await fetch("/api/render", {
+      const res = await fetch(`/api/projects/${projectId}/fragments/${fragmentId}/regenerate`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ projectId }),
       });
-      const data = await res.json();
       if (res.ok) {
-        alert(`Video rendered successfully!\nOutput: ${data.outputPath}`);
-        await fetchProject();
+        fetchProject();
       } else {
-        alert(data.error || "Render failed");
+        const data = await res.json();
+        alert(data.error || "Regeneration failed");
       }
-    } catch (err) {
-      console.error("Render error:", err);
-      alert("Render failed");
+    } catch {
+      alert("Regeneration failed");
     } finally {
-      setRendering(false);
+      setRegeneratingId(null);
     }
   };
 
   const formatTime = (seconds: number) => {
-    const h = Math.floor(seconds / 3600);
-    const m = Math.floor((seconds % 3600) / 60);
+    const m = Math.floor(seconds / 60);
     const s = Math.floor(seconds % 60);
-    if (h > 0) {
-      return `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
-    }
     return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
   };
 
@@ -158,170 +127,132 @@ export default function GenerationsPage() {
     );
   }
 
-  // List view - shows generation history or empty state
-  if (viewMode === "list") {
-    return (
-      <div className="h-full flex flex-col items-center justify-center">
-        {project.generations.length === 0 && project.fragments.length === 0 ? (
-          <div className="text-center text-[var(--text-muted)]">
-            <p className="text-lg">No projects yet</p>
-          </div>
-        ) : (
-          <div className="w-full max-w-2xl mx-auto p-6 space-y-3">
-            {project.generations.map((gen) => (
-              <div
-                key={gen.id}
-                onClick={() => setViewMode("detail")}
-                className="bg-[var(--bg-card)] border border-[var(--border-color)] rounded-xl p-4 cursor-pointer hover:border-[var(--border-light)] transition-all"
-              >
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h3 className="text-sm font-semibold">{project.name}</h3>
-                    <p className="text-xs text-[var(--text-muted)] mt-1">
-                      {gen.completedFragments}/{gen.totalFragments} fragments
-                    </p>
-                  </div>
-                  <span className={`text-xs px-2 py-0.5 rounded-full ${
-                    gen.status === "completed" ? "bg-green-900/30 text-green-400" :
-                    gen.status === "running" ? "bg-yellow-900/30 text-yellow-400" :
-                    "bg-gray-800/30 text-gray-400"
-                  }`}>
-                    {gen.status}
-                  </span>
-                </div>
-              </div>
-            ))}
-            {project.fragments.length > 0 && project.generations.length === 0 && (
-              <div
-                onClick={() => setViewMode("detail")}
-                className="bg-[var(--bg-card)] border border-[var(--border-color)] rounded-xl p-4 cursor-pointer hover:border-[var(--border-light)] transition-all"
-              >
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h3 className="text-sm font-semibold">{project.name}</h3>
-                    <p className="text-xs text-[var(--text-muted)] mt-1">
-                      {project.fragments.length} fragments
-                    </p>
-                  </div>
-                  <span className="text-xs px-2 py-0.5 rounded-full bg-gray-800/30 text-gray-400">
-                    {project.status}
-                  </span>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-    );
-  }
-
-  // Detail view - shows fragments grid
   const completedFragments = project.fragments.filter((f) => f.status === "completed").length;
   const totalFragments = project.fragments.length;
   const totalDuration = project.fragments
     .filter((f) => f.duration)
     .reduce((sum, f) => sum + (f.duration || 0), 0);
-
-  const isGenerating = project.status === "generating" || project.status === "transcribing";
+  const isDone = project.status === "completed";
+  const isFailed = project.status === "failed";
+  const isEmpty = totalFragments === 0 && !isRunning && project.status === "draft";
 
   return (
     <div className="p-6">
       {/* Header */}
-      <div className="mb-4">
+      <div className="flex items-center justify-between mb-4">
         <h1 className="text-xl font-bold">{project.name}</h1>
-        <button
-          onClick={() => setViewMode("list")}
-          className="flex items-center gap-1.5 text-sm text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors mt-1"
-        >
-          <ArrowLeft size={14} />
-          Back to generations
-        </button>
+        <div className="flex items-center gap-3">
+          {isRunning && (
+            <button
+              onClick={handleStop}
+              className="flex items-center gap-1.5 px-4 py-2 bg-[var(--bg-card)] border border-[var(--border-color)] hover:border-red-500 text-[var(--text-secondary)] hover:text-red-400 rounded-lg text-sm transition-colors"
+            >
+              <Square size={14} />
+              Stop
+            </button>
+          )}
+          {isDone && project.outputPath && (
+            <a
+              href={`/api/projects/${projectId}/download`}
+              className="flex items-center gap-1.5 px-4 py-2 bg-green-600 hover:bg-green-500 text-white rounded-lg text-sm font-medium transition-colors"
+            >
+              <Download size={14} />
+              Download Video
+            </a>
+          )}
+        </div>
       </div>
 
+      {/* Pipeline Stage Progress */}
+      {(isRunning || isDone || isFailed) && (
+        <div className="mb-6">
+          {/* Stages stepper */}
+          <div className="flex items-center gap-1 mb-3">
+            {STAGES.map((stage, i) => {
+              const currentIdx = STAGES.findIndex((s) => s.key === project.currentStage);
+              const isActive = stage.key === project.currentStage;
+              const isCompleted = i < currentIdx || isDone;
+
+              return (
+                <div key={stage.key} className="flex items-center flex-1">
+                  <div className={`flex-1 h-1.5 rounded-full ${
+                    isCompleted ? "bg-green-400" :
+                    isActive ? "bg-[var(--accent)]" :
+                    "bg-[var(--bg-primary)]"
+                  }`}>
+                    {isActive && (
+                      <div
+                        className="h-full bg-[var(--accent)] rounded-full transition-all duration-500"
+                        style={{ width: `${project.progress}%` }}
+                      />
+                    )}
+                  </div>
+                  {i < STAGES.length - 1 && <div className="w-1" />}
+                </div>
+              );
+            })}
+          </div>
+          <div className="flex items-center justify-between text-xs text-[var(--text-muted)]">
+            {STAGES.map((stage) => {
+              const isActive = stage.key === project.currentStage;
+              return (
+                <span key={stage.key} className={isActive ? "text-[var(--accent)] font-medium" : ""}>
+                  {stage.label}
+                </span>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Status Bar */}
-      {(totalFragments > 0 || isGenerating) && (
+      {totalFragments > 0 && (
         <div className="mb-6">
           <StatusBar
             status={
-              rendering ? "running" :
-              isGenerating ? "running" :
-              project.status === "completed" ? "completed" :
-              completedFragments === totalFragments && totalFragments > 0 ? "completed" :
-              completedFragments > 0 ? "running" : "pending"
+              isRunning ? "running" :
+              isDone ? "completed" :
+              isFailed ? "failed" :
+              project.status === "cancelled" ? "cancelled" :
+              "pending"
             }
             completedFragments={completedFragments}
             totalFragments={totalFragments}
             duration={formatTime(totalDuration)}
-            estimatedDuration={
-              project.audioDuration ? formatTime(project.audioDuration) : undefined
-            }
-            elapsed={rendering ? formatTime(elapsedSeconds) : undefined}
-            onCancel={isGenerating ? () => {} : undefined}
-            onRender={completedFragments > 0 && !rendering ? handleRender : undefined}
+            elapsed={isRunning ? formatTime(elapsedSeconds) : undefined}
           />
         </div>
       )}
 
-      {/* Upload area */}
-      <div className="mb-6 flex items-center gap-3">
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept="video/*"
-          multiple
-          className="hidden"
-          onChange={(e) => {
-            if (e.target.files && e.target.files.length > 0) {
-              handleUploadFragments(e.target.files);
-            }
-          }}
-        />
+      {/* Status message */}
+      {project.statusMessage && (isRunning || isFailed) && (
+        <div className={`mb-4 px-4 py-2 rounded-lg text-sm ${
+          isFailed ? "bg-red-900/20 border border-red-800/30 text-red-400" :
+          "bg-[var(--bg-card)] border border-[var(--border-color)] text-[var(--text-secondary)]"
+        }`}>
+          {project.statusMessage}
+        </div>
+      )}
 
-        <button
-          onClick={() => fileInputRef.current?.click()}
-          disabled={uploading}
-          className="flex items-center gap-2 px-4 py-2 bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
-        >
-          {uploading ? (
-            <>
-              <Loader2 size={16} className="animate-spin" />
-              Uploading...
-            </>
-          ) : (
-            <>
-              <Upload size={16} />
-              Upload Fragments
-            </>
-          )}
-        </button>
-
-        {rendering && (
-          <div className="flex items-center gap-2 text-sm text-[var(--warning)]">
-            <Loader2 size={16} className="animate-spin" />
-            Rendering final video...
-          </div>
-        )}
-      </div>
-
-      {/* Fragments Grid */}
-      {totalFragments === 0 ? (
+      {/* Empty state */}
+      {isEmpty ? (
         <div className="text-center py-20 text-[var(--text-secondary)]">
-          {isGenerating ? (
-            <>
-              <Loader2 size={32} className="mx-auto mb-4 text-[var(--text-muted)] animate-spin" />
-              <p className="text-lg mb-2">Segments are being generated...</p>
-            </>
-          ) : (
-            <>
-              <FolderOpen size={48} className="mx-auto mb-4 text-[var(--text-muted)]" />
-              <p className="text-lg mb-2">No fragments yet</p>
-              <p className="text-sm text-[var(--text-muted)]">
-                Generate prompts first, then upload the generated video fragments here.
-              </p>
-            </>
-          )}
+          <FolderOpen size={48} className="mx-auto mb-4 text-[var(--text-muted)]" />
+          <p className="text-lg mb-2">No projects yet</p>
+          <p className="text-sm text-[var(--text-muted)]">
+            Go to General tab, upload audio, and click Start Generation.
+            <br />
+            Everything will be automated from there.
+          </p>
+        </div>
+      ) : isRunning && totalFragments === 0 ? (
+        <div className="text-center py-20 text-[var(--text-secondary)]">
+          <Loader2 size={32} className="mx-auto mb-4 text-[var(--text-muted)] animate-spin" />
+          <p className="text-lg mb-2">Segments are being generated...</p>
+          <p className="text-sm text-[var(--text-muted)]">{project.statusMessage}</p>
         </div>
       ) : (
+        /* Fragments Grid */
         <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
           {project.fragments.map((fragment) => (
             <FragmentCard
@@ -329,9 +260,12 @@ export default function GenerationsPage() {
               index={fragment.index}
               status={fragment.status}
               duration={fragment.duration}
-              thumbnailPath={fragment.thumbnailPath}
+              thumbnailPath={fragment.thumbnailPath || fragment.imagePath}
               prompt={fragment.prompt}
+              errorMessage={fragment.errorMessage}
+              isRegenerating={regeneratingId === fragment.id}
               onShowPrompt={() => setSelectedPrompt(fragment.prompt)}
+              onRegenerate={() => handleRegenerate(fragment.id)}
             />
           ))}
         </div>
