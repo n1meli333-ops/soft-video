@@ -81,22 +81,43 @@ export const FLOW_EDITOR = {
 
 // Gemini Web - Chat Interface
 export const GEMINI_CHAT = {
-  // Chat input
-  chatInput: '[contenteditable="true"], textarea[aria-label*="prompt"], .ql-editor, [data-placeholder]',
+  // Chat input - try multiple selectors for different Gemini versions
+  chatInput: [
+    '.ql-editor[contenteditable="true"]',
+    'div[contenteditable="true"][aria-label]',
+    'div[contenteditable="true"]',
+    'textarea[aria-label*="prompt"]',
+    'textarea[placeholder]',
+    'rich-textarea [contenteditable="true"]',
+    '[data-placeholder][contenteditable="true"]',
+  ].join(", "),
 
   // Send button
-  sendButton: 'button[aria-label="Send message"], button[data-at="send"], .send-button',
+  sendButton: [
+    'button[aria-label="Send message"]',
+    'button[aria-label*="Send"]',
+    'button[data-at="send"]',
+    '.send-button-container button',
+    'button:has(svg[viewBox])',
+  ].join(", "),
 
   // Response container - Gemini renders responses in markdown
-  responseContainer: '.response-container, .model-response, [data-message-author-role="model"]',
-  responseText: '.markdown, .response-text, [data-message-author-role="model"] .message-content',
+  responseContainer: '.response-container, .model-response, [data-message-author-role="model"], .conversation-container',
+  responseText: '.markdown, .response-text, [data-message-author-role="model"] .message-content, .model-response-text',
   lastResponse: '.response-container:last-child, [data-message-author-role="model"]:last-of-type',
 
   // Loading indicator (Gemini shows dots while generating)
-  thinkingIndicator: '.thinking, [aria-label*="loading"], [aria-label*="thinking"]',
+  thinkingIndicator: [
+    '.thinking',
+    '[aria-label*="loading"]',
+    '[aria-label*="thinking"]',
+    '.loading-indicator',
+    '.progress-indicator',
+    'mat-progress-bar',
+  ].join(", "),
 
   // New chat button
-  newChatButton: 'button[aria-label="New chat"], a:has-text("New chat")',
+  newChatButton: 'button[aria-label="New chat"], a:has-text("New chat"), a[href="/app"]',
 
   // Stop generating button
   stopButton: 'button[aria-label="Stop generating"], button:has-text("Stop")',

@@ -8,6 +8,8 @@
 import { getContext, ensureLoggedIn, saveSession } from "./browser-manager";
 import { GEMINI_URL, GEMINI_CHAT, TIMEOUTS } from "./selectors";
 import { Page } from "playwright";
+import path from "path";
+import fs from "fs";
 
 interface PromptGenerationOptions {
   totalFragments: number;
@@ -108,8 +110,18 @@ async function sendMessage(page: Page, message: string): Promise<void> {
  * Open a new Gemini chat session.
  */
 async function openNewChat(page: Page): Promise<void> {
-  await page.goto(GEMINI_URL, { waitUntil: "domcontentloaded", timeout: TIMEOUTS.navigation });
-  await page.waitForTimeout(3000);
+  console.log(`[PromptGen] Navigating to ${GEMINI_URL}`);
+  await page.goto(GEMINI_URL, { waitUntil: "domcontentloaded", timeout: 30000 });
+  await page.waitForTimeout(5000);
+
+  // Log current URL to see if we got redirected (login, consent, etc.)
+  console.log(`[PromptGen] Current URL: ${page.url()}`);
+
+  // Take debug screenshot
+  const debugDir = path.join(process.cwd(), "data");
+  fs.mkdirSync(debugDir, { recursive: true });
+  await page.screenshot({ path: path.join(debugDir, "gemini-debug.png"), fullPage: true });
+  console.log(`[PromptGen] Debug screenshot saved to data/gemini-debug.png`);
 
   // Try clicking "New chat" if available
   try {
@@ -208,6 +220,14 @@ I need exactly ${totalFragments} video prompts. Generate the first 100 prompts n
     return result;
   } catch (error) {
     console.error("[PromptGen] Error:", error);
+    // Save error screenshot
+    try {
+      const debugDir = path.join(process.cwd(), "data");
+      fs.mkdirSync(debugDir, { recursive: true });
+      await page.screenshot({ path: path.join(debugDir, "gemini-error.png"), fullPage: true });
+      console.log(`[PromptGen] Error screenshot saved to data/gemini-error.png`);
+      console.log(`[PromptGen] Page URL at error: ${page.url()}`);
+    } catch {}
     await page.close();
     throw error;
   }
