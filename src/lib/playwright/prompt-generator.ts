@@ -5,7 +5,7 @@
  * automatically sending "continue" until all fragments are covered.
  */
 
-import { getContext, ensureLoggedIn, saveSession } from "./browser-manager";
+import { getContext, ensureLoggedIn, saveSession, handleConsentPopup } from "./browser-manager";
 import { GEMINI_URL, GEMINI_CHAT, TIMEOUTS } from "./selectors";
 import { Page } from "playwright";
 import path from "path";
@@ -113,6 +113,10 @@ async function openNewChat(page: Page): Promise<void> {
   console.log(`[PromptGen] Navigating to ${GEMINI_URL}`);
   await page.goto(GEMINI_URL, { waitUntil: "domcontentloaded", timeout: 30000 });
   await page.waitForTimeout(5000);
+
+  // Handle consent popup if shown
+  await handleConsentPopup(page);
+  await page.waitForTimeout(2000);
 
   // Log current URL to see if we got redirected (login, consent, etc.)
   console.log(`[PromptGen] Current URL: ${page.url()}`);
